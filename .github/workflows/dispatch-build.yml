@@ -1,0 +1,48 @@
+name: Build & Dispatch
+
+on:
+  push:
+    paths:
+    - 'ml_fixes/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build
+    runs-on: windows-latest
+    env:
+      SOLUTION_FILE_PATH: .
+      BUILD_CONFIGURATION: Release
+      BUILD_PLATFORM: "x86"
+    outputs:
+      status: ${{ steps.build-project.conclusion }}
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v1
+
+    - name: Build Project
+      id: build-project
+      working-directory: ${{env.GITHUB_WORKSPACE}}
+      run: msbuild /m /p:Configuration=${{env.BUILD_CONFIGURATION}} ${{env.SOLUTION_FILE_PATH}} /p:Platform=${{env.BUILD_PLATFORM}}
+
+  dispatch:
+    name: Dispatch
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/master' && needs.build.outputs.status == 'success'
+    env:
+      SOLUTION_FILE_PATH: .
+      BUILD_CONFIGURATION: Release
+      BUILD_PLATFORM: "x86"
+
+    steps:
+    - name: Dispatch Commit Command
+      run: |
+        curl -X POST https://api.github.com/repos/Lemonymous/ITB-ml-fixes-dll/dispatches \
+          -H 'Accept: application/vnd.github.everest-preview+json' \
+          -u ${{ secrets.ACCESS_TOKEN }} \
+          --data '{"event_type": "commit-build", "client_payload": { "repository": "'"$GITHUB_REPOSITORY"'" }}'
